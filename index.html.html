@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>MIDNIGHT DEFENSE</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  background:#000; overflow:hidden;
+  width:100vw; height:100vh;
+  font-family:'Courier New',monospace;
+  cursor:crosshair; user-select:none; -webkit-user-select:none;
+}
+canvas { display:block; width:100vw; height:100vh; image-rendering:pixelated; }
+#ui { position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; }
+
+#score-display {
+  position:absolute; top:14px; left:18px;
+  color:#00ffcc; line-height:1.5; text-shadow:0 0 8px #00ffcc88;
+}
+#score-display .lbl { color:#00ffcc88; font-size:9px; letter-spacing:2px; }
+#score-display .val { font-size:20px; font-weight:bold; letter-spacing:1px; }
+
+#cal-display {
+  position:absolute; top:14px; left:50%;
+  transform:translateX(-50%); text-align:center; min-width:210px;
+}
+#cal-display .lbl { font-size:9px; letter-spacing:3px; color:#aaffee88; margin-bottom:4px; }
+#cal-bar-wrap {
+  width:210px; height:14px; background:#001a14;
+  border:1px solid #00ffcc44; position:relative;
+}
+#cal-bar-red {
+  position:absolute; top:0; height:100%;
+  background:#ff2244cc; pointer-events:none;
+  transition:opacity 0.5s;
+}
+#cal-bar-green {
+  position:absolute; top:0; left:0; height:100%;
+  background:linear-gradient(90deg,#00cc88,#00ffcc);
+  box-shadow:0 0 6px #00ffcc88;
+}
+#cal-text { font-size:9px; color:#00ffcc88; margin-top:2px; letter-spacing:1px; }
+
+#timer-display {
+  position:absolute; top:14px; right:18px;
+  text-align:right; color:#ffcc00;
+}
+#timer-display .lbl { font-size:9px; letter-spacing:3px; color:#ffcc0066; }
+#timer-display .val { font-size:22px; font-weight:bold; text-shadow:0 0 8px #ffcc0088; }
+
+#crosshair {
+  position:absolute; top:50%; left:50%;
+  transform:translate(-50%,-50%);
+  color:#ffffff88; font-size:24px; line-height:1;
+  text-shadow:0 0 4px #ffffff44; pointer-events:none;
+}
+
+#overlay {
+  position:absolute; top:0; left:0; width:100%; height:100%;
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  background:rgba(0,0,0,0.88); pointer-events:all; cursor:default;
+}
+#overlay.hidden { display:none; }
+
+.ov-title {
+  font-size:clamp(22px,5vw,42px); letter-spacing:6px;
+  color:#00ffcc; text-shadow:0 0 24px #00ffcc88; margin-bottom:6px;
+}
+.ov-sub { font-size:clamp(8px,2vw,11px); letter-spacing:5px; color:#ffffff33; margin-bottom:28px; }
+
+.stage-select-label { font-size:9px; letter-spacing:4px; color:#ffffff44; margin-bottom:10px; }
+.stage-btn-row { display:flex; gap:10px; flex-wrap:wrap; justify-content:center; margin-bottom:28px; }
+.stage-btn {
+  padding:10px 20px; background:transparent;
+  border:1px solid #ffffff22; color:#ffffff55;
+  font-family:'Courier New',monospace; font-size:11px; letter-spacing:2px;
+  cursor:pointer; transition:all 0.18s; pointer-events:all; text-align:center; line-height:1.5;
+}
+.stage-btn:hover { border-color:#00ffcc88; color:#00ffcc; text-shadow:0 0 8px #00ffcc88; }
+.stage-btn.selected {
+  border-color:#00ffcc; color:#00ffcc;
+  text-shadow:0 0 8px #00ffcc; box-shadow:0 0 12px #00ffcc22, inset 0 0 12px #00ffcc08;
+}
+.stage-btn .sb-sub { font-size:8px; color:#ffffff33; margin-top:3px; letter-spacing:1px; }
+.stage-btn.selected .sb-sub { color:#00ffcc66; }
+
+.start-btn {
+  padding:14px 52px; background:transparent;
+  border:1px solid #00ffcc; color:#00ffcc;
+  font-family:'Courier New',monospace; font-size:13px; letter-spacing:4px;
+  cursor:pointer; text-shadow:0 0 8px #00ffcc88;
+  box-shadow:0 0 16px #00ffcc22, inset 0 0 16px #00ffcc0a;
+  transition:all 0.2s; pointer-events:all;
+}
+.start-btn:hover { background:#00ffcc11; box-shadow:0 0 28px #00ffcc44; }
+
+#result-area { text-align:center; margin-bottom:28px; }
+.r-en { font-size:clamp(13px,3vw,22px); letter-spacing:4px; color:#ff4466; text-shadow:0 0 16px #ff446688; margin-bottom:5px; }
+.r-jp { font-size:clamp(11px,2.5vw,16px); letter-spacing:2px; color:#ff446677; margin-bottom:24px; font-style:italic; }
+.r-lbl { font-size:9px; letter-spacing:3px; color:#ffffff44; margin-bottom:3px; }
+.r-val-big { font-size:clamp(20px,5vw,40px); color:#ffcc00; text-shadow:0 0 14px #ffcc0088; margin-bottom:5px; letter-spacing:2px; }
+.r-eaten { font-size:clamp(11px,2.5vw,16px); color:#ff6644; text-shadow:0 0 8px #ff664466; margin-bottom:24px; letter-spacing:1px; }
+
+.dmg-float {
+  position:absolute; pointer-events:none;
+  font-family:'Courier New',monospace; font-weight:bold;
+  color:#ff3355; text-shadow:0 0 8px #ff3355; white-space:nowrap;
+}
+</style>
+</head>
+<body>
+<canvas id="gameCanvas"></canvas>
+<div id="ui">
+  <div id="score-display">
+    <div class="lbl">CALORIES SAVED</div>
+    <div class="val" id="score-val">0 kcal</div>
+  </div>
+  <div id="cal-display">
+    <div class="lbl">CALORIE LIMIT</div>
+    <div id="cal-bar-wrap">
+      <div id="cal-bar-red" style="width:0%;left:0%"></div>
+      <div id="cal-bar-green" style="width:100%"></div>
+    </div>
+    <div id="cal-text">今日の残りカロリー</div>
+  </div>
+  <div id="timer-display">
+    <div class="lbl">TIME</div>
+    <div class="val" id="timer-val">60</div>
+  </div>
+  <div id="crosshair">+</div>
+</div>
+
+<div id="overlay">
+  <div class="ov-title">MIDNIGHT DEFENSE</div>
+  <div class="ov-sub">深夜の食欲と戦え</div>
+  <div id="result-area" style="display:none">
+    <div class="r-en" id="result-en-txt">MIDNIGHT DEFENSE FAILED</div>
+    <div class="r-jp" id="result-jp-txt">— 深夜食欲に負けました —</div>
+    <div class="r-lbl">CALORIES SAVED</div>
+    <div class="r-val-big" id="final-score">0 kcal</div>
+    <div class="r-lbl">食べてしまったカロリー</div>
+    <div class="r-eaten" id="final-eaten">0 kcal</div>
+  </div>
+  <div class="stage-select-label">— SELECT STAGE —</div>
+  <div class="stage-btn-row" id="stage-btn-row"></div>
+  <button class="start-btn" id="start-btn">▶ START</button>
+</div>
+
+<script>
+// ============================================================
+// STAGE DEFINITIONS
+// ============================================================
+const STAGE_DEFS = [
+  {
+    id:'SWEETS', label:'🍩 SWEETS', sub:'甘いもの特集',
+    foods:[
+      { name:'DONUT',    label:'ドーナツ',  kcal:300, damage:300, color:'#ff88cc', glow:'#ff44aa', shade:'#cc3377' },
+      { name:'PUDDING',  label:'プリン',    kcal:250, damage:250, color:'#ffeeaa', glow:'#ffcc44', shade:'#cc9900' },
+      { name:'ICECREAM', label:'アイス',    kcal:200, damage:200, color:'#aaeeff', glow:'#44ccff', shade:'#3399cc' },
+      { name:'CAKE',     label:'ケーキ',    kcal:380, damage:380, color:'#ffbbcc', glow:'#ff6688', shade:'#cc3355' },
+      { name:'CHOCO',    label:'チョコ',    kcal:550, damage:550, color:'#cc8844', glow:'#aa5522', shade:'#774422' },
+    ]
+  },
+  {
+    id:'FASTFOOD', label:'🍔 FAST FOOD', sub:'ジャンクフード特集',
+    foods:[
+      { name:'BURGER',   label:'バーガー',    kcal:600, damage:600, color:'#dd8844', glow:'#ff6600', shade:'#aa5500' },
+      { name:'FRIES',    label:'フライ',      kcal:400, damage:400, color:'#ffcc66', glow:'#ffaa00', shade:'#cc8800' },
+      { name:'HOTDOG',   label:'ホットドッグ',kcal:480, damage:480, color:'#ffaa88', glow:'#ff7744', shade:'#cc4422' },
+      { name:'CHIPS',    label:'チップス',    kcal:450, damage:450, color:'#eebb44', glow:'#ccaa00', shade:'#996600' },
+      { name:'PIZZA',    label:'ピザ',        kcal:700, damage:700, color:'#ff8844', glow:'#ff5500', shade:'#cc3300' },
+    ]
+  },
+  {
+    id:'RAMEN', label:'🍜 RAMEN NIGHT', sub:'深夜のラーメン',
+    foods:[
+      { name:'RAMEN',    label:'ラーメン',  kcal:600, damage:600, color:'#ffaa44', glow:'#ff8800', shade:'#cc6600' },
+      { name:'GYOZA',    label:'餃子',      kcal:320, damage:320, color:'#ffdd88', glow:'#ffaa44', shade:'#cc8833' },
+      { name:'KARAAGE',  label:'唐揚げ',    kcal:500, damage:500, color:'#dd9944', glow:'#ff8800', shade:'#996622' },
+      { name:'ONIGIRI',  label:'おにぎり',  kcal:200, damage:200, color:'#eeeedd', glow:'#aaaaaa', shade:'#888877' },
+      { name:'CURRY',    label:'カレー',    kcal:700, damage:700, color:'#cc8822', glow:'#ff9900', shade:'#995500' },
+    ]
+  },
+];
+
+// ============================================================
+// PIXEL ART (8x8, value 2 = darker shade)
+// ============================================================
+const PIX = {
+  DONUT:   [[0,0,1,1,1,1,0,0],[0,1,1,2,2,1,1,0],[1,1,2,0,0,2,1,1],[1,2,0,0,0,0,2,1],[1,1,2,0,0,2,1,1],[0,1,1,2,2,1,1,0],[0,0,1,1,1,1,0,0],[0,0,0,0,0,0,0,0]],
+  PUDDING: [[0,0,0,1,1,0,0,0],[0,0,1,2,2,1,0,0],[0,1,2,1,1,2,1,0],[1,1,1,1,1,1,1,1],[1,2,1,2,1,2,1,1],[1,1,1,1,1,1,1,1],[0,1,1,2,2,1,1,0],[0,0,1,1,1,1,0,0]],
+  ICECREAM:[[0,0,1,1,1,1,0,0],[0,1,2,1,1,2,1,0],[0,1,1,1,1,1,1,0],[0,0,1,1,1,1,0,0],[0,0,0,1,1,0,0,0],[0,0,0,1,1,0,0,0],[0,0,0,2,1,0,0,0],[0,0,0,0,0,0,0,0]],
+  CAKE:    [[0,0,0,1,0,0,0,0],[0,0,1,1,1,0,0,0],[0,1,2,1,1,1,0,0],[1,1,1,1,1,1,1,0],[1,2,1,2,1,2,1,0],[1,1,1,1,1,1,1,0],[0,1,1,1,1,1,0,0],[0,0,0,0,0,0,0,0]],
+  CHOCO:   [[0,1,1,1,1,1,1,0],[1,1,1,1,1,1,1,1],[1,2,1,2,1,2,1,1],[1,1,1,1,1,1,1,1],[1,2,1,2,1,2,1,1],[1,1,1,1,1,1,1,1],[0,1,1,1,1,1,1,0],[0,0,0,0,0,0,0,0]],
+  BURGER:  [[0,0,1,1,1,1,0,0],[0,1,1,1,1,1,1,0],[1,2,2,2,2,2,2,1],[1,1,1,1,1,1,1,1],[1,2,1,1,1,1,2,1],[1,1,1,1,1,1,1,1],[1,2,2,2,2,2,2,1],[0,1,1,1,1,1,0,0]],
+  FRIES:   [[1,0,1,0,1,0,1,0],[1,0,1,1,1,0,1,0],[1,1,1,1,1,1,1,0],[1,2,1,1,1,2,1,1],[1,1,1,1,1,1,1,1],[0,1,1,1,1,1,1,0],[0,0,1,2,2,1,0,0],[0,0,0,1,1,0,0,0]],
+  HOTDOG:  [[0,0,1,1,1,1,0,0],[0,1,1,2,2,1,1,0],[1,1,2,1,1,2,1,1],[1,1,1,2,2,1,1,1],[1,1,1,1,1,1,1,1],[0,1,1,1,1,1,1,0],[0,0,1,1,1,1,0,0],[0,0,0,0,0,0,0,0]],
+  CHIPS:   [[0,1,0,0,0,0,1,0],[0,1,1,0,0,1,1,0],[0,1,1,1,1,1,1,0],[1,1,2,1,1,2,1,1],[1,1,1,1,1,1,1,1],[0,1,1,2,2,1,1,0],[0,0,1,1,1,1,0,0],[0,0,0,0,0,0,0,0]],
+  PIZZA:   [[0,0,0,1,1,0,0,0],[0,0,1,2,1,1,0,0],[0,1,1,1,2,1,1,0],[1,1,2,1,1,2,1,1],[1,1,1,1,1,1,1,1],[0,1,1,1,1,1,1,0],[0,0,1,1,1,1,0,0],[0,0,0,1,1,0,0,0]],
+  RAMEN:   [[0,0,1,0,1,0,1,0],[0,1,1,1,1,1,1,0],[1,1,2,1,1,2,1,1],[1,1,1,1,1,1,1,1],[1,2,1,2,1,2,1,1],[0,1,1,0,0,1,1,0],[0,1,1,1,1,1,1,0],[0,0,1,1,1,1,0,0]],
+  GYOZA:   [[0,0,1,1,1,1,0,0],[0,1,2,1,1,2,1,0],[1,1,1,1,1,1,1,1],[1,2,1,1,1,1,2,1],[1,1,1,1,1,1,1,1],[0,1,1,1,1,1,1,0],[0,0,1,1,1,1,0,0],[0,0,0,0,0,0,0,0]],
+  KARAAGE: [[0,0,1,1,0,0,0,0],[0,1,2,1,1,0,0,0],[1,1,1,2,1,1,0,0],[1,2,1,1,1,1,1,0],[1,1,1,1,2,1,1,1],[0,1,1,1,1,1,1,0],[0,0,1,1,1,1,0,0],[0,0,0,0,0,0,0,0]],
+  ONIGIRI: [[0,0,0,1,1,0,0,0],[0,0,1,1,1,1,0,0],[0,1,1,2,2,1,1,0],[1,1,1,1,1,1,1,1],[1,1,2,1,1,2,1,1],[1,1,1,1,1,1,1,1],[0,1,1,1,1,1,1,0],[0,0,1,1,1,1,0,0]],
+  CURRY:   [[0,0,1,1,1,1,0,0],[0,1,1,2,2,1,1,0],[1,1,2,1,1,2,1,1],[1,1,1,1,1,1,1,1],[1,2,1,2,1,2,1,1],[1,1,1,1,1,1,1,1],[0,1,1,1,1,1,1,0],[0,0,0,0,0,0,0,0]],
+};
+
+// ============================================================
+// CANVAS
+// ============================================================
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+let W, H, DPR;
+function resize() {
+  DPR = window.devicePixelRatio || 1;
+  W = window.innerWidth; H = window.innerHeight;
+  canvas.width = W*DPR; canvas.height = H*DPR;
+  canvas.style.width = W+'px'; canvas.style.height = H+'px';
+  ctx.scale(DPR, DPR);
+}
+resize();
+window.addEventListener('resize', resize);
+
+// ============================================================
+// GAME STATE
+// ============================================================
+const GAME_DURATION = 60000;
+const CAL_LIMIT = 2000;
+let gameRunning = false;
+let score = 0;
+let calCurrent = CAL_LIMIT;
+let calorieEaten = 0;
+// Bar animation
+let barGreenPct = 100;
+let barRedLeft = 100;   // left% of red bar
+let barRedWidth = 0;    // width% of red bar
+let redFadeTimer = 0;
+let selectedStage = STAGE_DEFS[0];
+let gameTimer = 0;
+let combo = 0, comboTimer = 0;
+let comboSprites = [];
+let particles = [], enemies = [];
+let spawnTimer = 0, lastTime = 0;
+let flashAlpha = 0, playerKick = 0;
+let bgStars = [], buildingData = null;
+
+// ============================================================
+// STAGE SELECT UI
+// ============================================================
+(function buildStageUI() {
+  const row = document.getElementById('stage-btn-row');
+  STAGE_DEFS.forEach((sd, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'stage-btn'+(i===0?' selected':'');
+    btn.innerHTML = `<div>${sd.label}</div><div class="sb-sub">${sd.sub}</div>`;
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.stage-btn').forEach(b=>b.classList.remove('selected'));
+      btn.classList.add('selected');
+      selectedStage = STAGE_DEFS[i];
+    });
+    btn.addEventListener('touchstart', e=>{e.stopPropagation();btn.click();});
+    row.appendChild(btn);
+  });
+})();
+
+// ============================================================
+// BACKGROUND
+// ============================================================
+function initBg() {
+  bgStars = [];
+  buildingData = null;
+  for (let i=0; i<120; i++) bgStars.push({
+    x:Math.random()*W, y:Math.random()*H*0.62,
+    r:Math.random()*1.2+0.3, a:Math.random()*0.6+0.2,
+    twinkle:Math.random()*Math.PI*2,
+  });
+}
+
+function drawBackground(dt) {
+  const grad = ctx.createLinearGradient(0,0,0,H);
+  grad.addColorStop(0,'#03010a'); grad.addColorStop(0.5,'#07020f');
+  grad.addColorStop(0.7,'#110a1a'); grad.addColorStop(1,'#1a0a0a');
+  ctx.fillStyle=grad; ctx.fillRect(0,0,W,H);
+  for (const s of bgStars) {
+    s.twinkle+=dt*0.002;
+    ctx.globalAlpha=s.a*(0.7+0.3*Math.sin(s.twinkle));
+    ctx.fillStyle='#ffffff'; ctx.fillRect(s.x,s.y,s.r,s.r);
+  }
+  ctx.globalAlpha=1;
+  const gY=H*0.72;
+  ctx.fillStyle='#0a0a14'; ctx.fillRect(0,gY,W,H-gY);
+  drawBuildings(gY);
+  ctx.strokeStyle='#00ffcc22'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(0,gY); ctx.lineTo(W,gY); ctx.stroke();
+  ctx.globalAlpha=0.04;
+  for (let y=0;y<H;y+=4){ctx.fillStyle='#000';ctx.fillRect(0,y,W,2);}
+  ctx.globalAlpha=1;
+}
+
+function drawBuildings(gY) {
+  if (!buildingData) {
+    buildingData=[];
+    const bw=Math.max(20,W/32);
+    const nc=['#00ffcc','#ff44aa','#ffcc00','#4488ff','#ff4466'];
+    for (let x=-bw;x<W+bw;x+=bw*(0.7+Math.random()*0.8)) {
+      const bh=gY*(0.2+Math.random()*0.5);
+      const neons=[];
+      for (let i=0;i<Math.floor(Math.random()*3);i++)
+        neons.push({x:x+Math.random()*bw*0.6+bw*0.2,y:gY-bh+Math.random()*bh*0.7+bh*0.1,
+          c:nc[Math.floor(Math.random()*nc.length)],on:Math.random()>0.3,blink:Math.random()*Math.PI*2});
+      buildingData.push({x,w:bw*0.9,h:bh,neons,shade:0.15+Math.random()*0.1});
+    }
+  }
+  for (const b of buildingData) {
+    ctx.fillStyle=`rgba(10,8,20,${b.shade+0.1})`; ctx.fillRect(b.x,H*0.72-b.h,b.w,b.h);
+    ctx.strokeStyle='#ffffff08'; ctx.lineWidth=1; ctx.strokeRect(b.x,H*0.72-b.h,b.w,b.h);
+    for (const n of b.neons) {
+      n.blink+=0.04;
+      if (n.on&&Math.sin(n.blink*0.5)>-0.3) {
+        ctx.globalAlpha=0.7+0.3*Math.sin(n.blink);
+        ctx.fillStyle=n.c; ctx.shadowBlur=6; ctx.shadowColor=n.c;
+        ctx.fillRect(n.x-2,n.y-2,4,4); ctx.shadowBlur=0;
+      }
+    }
+    ctx.globalAlpha=1;
+  }
+}
+
+// ============================================================
+// PLAYER
+// ============================================================
+function drawPlayer() {
+  const px=W/2, py=H*0.88+playerKick, pw=W*0.18, ph=H*0.1;
+  ctx.globalAlpha=0.12; ctx.fillStyle='#00ffcc';
+  ctx.beginPath(); ctx.ellipse(px,py+ph*0.2,pw*0.4,ph*0.1,0,0,Math.PI*2); ctx.fill();
+  ctx.globalAlpha=1;
+  ctx.fillStyle='#050308'; ctx.strokeStyle='#00ffcc66'; ctx.lineWidth=1.5;
+  const bw=pw*0.35,bh=ph*0.22;
+  ctx.fillRect(px-bw/2,py-ph*0.1,bw,bh); ctx.strokeRect(px-bw/2,py-ph*0.1,bw,bh);
+  ctx.fillStyle='#00ffccaa'; ctx.fillRect(px-bw*0.3,py-ph*0.18,bw*0.6,ph*0.1);
+  ctx.fillStyle='#050308';
+  ctx.fillRect(px-pw*0.28,py,pw*0.56,ph*0.5); ctx.strokeRect(px-pw*0.28,py,pw*0.56,ph*0.5);
+  ctx.fillStyle='#0a0515';
+  ctx.fillRect(px-pw*0.45,py+ph*0.08,pw*0.18,ph*0.35); ctx.strokeRect(px-pw*0.45,py+ph*0.08,pw*0.18,ph*0.35);
+  ctx.fillRect(px+pw*0.27,py+ph*0.08,pw*0.18,ph*0.35); ctx.strokeRect(px+pw*0.27,py+ph*0.08,pw*0.18,ph*0.35);
+  ctx.strokeStyle='#00ffcc44'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(px-pw*0.25,py+ph*0.1); ctx.lineTo(px+pw*0.25,py+ph*0.1); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(px-pw*0.2,py+ph*0.25); ctx.lineTo(px+pw*0.2,py+ph*0.25); ctx.stroke();
+  ctx.fillStyle='#00ffcc'; ctx.shadowBlur=8; ctx.shadowColor='#00ffcc';
+  ctx.fillRect(px-2,py+ph*0.17,4,4); ctx.shadowBlur=0;
+  if (playerKick<-1) {
+    ctx.globalAlpha=Math.min(1,-playerKick*0.2);
+    ctx.fillStyle='#00ffcc'; ctx.shadowBlur=20; ctx.shadowColor='#00ffcc';
+    ctx.beginPath(); ctx.arc(px,py-ph*0.12,6,0,Math.PI*2); ctx.fill();
+    ctx.shadowBlur=0; ctx.globalAlpha=1;
+  }
+}
+
+// ============================================================
+// ENEMIES
+// ============================================================
+function spawnEnemy() {
+  const fd = selectedStage.foods[Math.floor(Math.random()*selectedStage.foods.length)];
+  enemies.push({
+    x: W*(0.2+Math.random()*0.6),
+    baseX: 0, y: H*0.38,
+    scale: 0.15+Math.random()*0.05,
+    maxScale: 1.5, speed: 0.00013+Math.random()*0.00004,
+    food: fd,
+    wobble: Math.random()*Math.PI*2,
+    wobbleSpeed: 0.5+Math.random()*0.5,
+    wobbleAmt: W*0.015,   // ← small float, ~50% of original
+    dead:false, dieAnim:0,
+  });
+  enemies[enemies.length-1].baseX = enemies[enemies.length-1].x;
+}
+
+function drawPixelFood(food, cx, cy, size, alpha, glowAmt) {
+  const pat = PIX[food.name]; if (!pat) return;
+  const pw = size/8;
+  ctx.globalAlpha = alpha;
+  if (glowAmt>0){ctx.shadowBlur=glowAmt; ctx.shadowColor=food.glow;}
+  for (let r=0;r<8;r++) for (let c=0;c<8;c++) {
+    const v=pat[r][c]; if (!v) continue;
+    ctx.fillStyle = v===2 ? food.shade : food.color;
+    ctx.fillRect(Math.round(cx-size/2+c*pw), Math.round(cy-size/2+r*pw), Math.ceil(pw), Math.ceil(pw));
+  }
+  ctx.shadowBlur=0; ctx.globalAlpha=1;
+}
+
+function drawEnemies(dt) {
+  for (let i=enemies.length-1;i>=0;i--) {
+    const e=enemies[i];
+    if (e.dead) {
+      e.dieAnim+=dt*0.006;
+      if (e.dieAnim>1){enemies.splice(i,1);continue;}
+      drawPixelFood(e.food,e.x,e.y,e.scale*W*0.08*(1+e.dieAnim*0.5),1-e.dieAnim,10*(1-e.dieAnim));
+      continue;
+    }
+    e.scale+=e.speed*dt;
+    e.wobble+=e.wobbleSpeed*dt*0.04;
+    e.x=e.baseX+Math.sin(e.wobble)*e.wobbleAmt;
+    const sz=e.scale*W*0.08;
+    // Warning ring
+    if (e.scale>1.0){
+      const ring=(e.scale-1.0)/0.5;
+      ctx.globalAlpha=ring*0.28; ctx.strokeStyle='#ff4466'; ctx.lineWidth=2;
+      ctx.beginPath(); ctx.arc(e.x,e.y,sz*0.7,0,Math.PI*2); ctx.stroke(); ctx.globalAlpha=1;
+    }
+    drawPixelFood(e.food,e.x,e.y,sz,0.9,6+e.scale*4);
+    // kcal label
+    if (e.scale>0.45) {
+      const la=Math.min(1,(e.scale-0.45)*2);
+      ctx.globalAlpha=la*0.85; ctx.fillStyle=e.food.color;
+      ctx.font=`${Math.max(9,Math.round(sz*0.17))}px 'Courier New',monospace`;
+      ctx.textAlign='center';
+      ctx.fillText(`${e.food.label} ${e.food.damage}kcal`,e.x,e.y+sz*0.62);
+      ctx.globalAlpha=1;
+    }
+    if (e.scale>=e.maxScale&&!e.dead){
+      e.dead=true; takeDamage(e.food,e.x,e.y);
+    }
+  }
+}
+
+// ============================================================
+// DAMAGE & CALORIE BAR
+// ============================================================
+function takeDamage(food, ex, ey) {
+  if (!gameRunning) return;
+  const dmg = food.damage;
+  const prevPct = calCurrent/CAL_LIMIT*100;
+  calCurrent = Math.max(0, calCurrent-dmg);
+  calorieEaten += dmg;
+  const newPct = calCurrent/CAL_LIMIT*100;
+
+  // Red bar: occupies the gap between new and old green
+  barGreenPct = newPct;
+  barRedLeft = newPct;
+  barRedWidth = prevPct - newPct;
+  redFadeTimer = 800;
+
+  flashAlpha = 0.42;
+  spawnHitParticles(ex,ey,'#ff3355');
+  spawnDmgFloat(ex,ey,`-${dmg}kcal`);
+  updateUI();
+  if (calCurrent<=0) setTimeout(endGame,200);
+}
+
+function updateCalBar(dt) {
+  if (redFadeTimer>0) {
+    redFadeTimer-=dt;
+    const red=document.getElementById('cal-bar-red');
+    red.style.left=barRedLeft+'%';
+    red.style.width=barRedWidth+'%';
+    red.style.opacity=Math.max(0,redFadeTimer/800);
+  } else {
+    document.getElementById('cal-bar-red').style.width='0%';
+  }
+}
+
+function spawnDmgFloat(x,y,text){
+  const el=document.createElement('div');
+  el.className='dmg-float';
+  el.textContent=text;
+  el.style.left=Math.round(x)+'px'; el.style.top=Math.round(y)+'px';
+  el.style.fontSize=Math.round(W*0.022)+'px';
+  el.style.transform='translate(-50%,-50%)';
+  el.style.opacity='1';
+  document.getElementById('ui').appendChild(el);
+  let start=null;
+  function a(ts){
+    if(!start)start=ts; const t=ts-start;
+    el.style.top=(y-t*0.07)+'px';
+    el.style.opacity=Math.max(0,1-t/700);
+    if(t<700)requestAnimationFrame(a); else el.remove();
+  }
+  requestAnimationFrame(a);
+}
+
+// ============================================================
+// PARTICLES
+// ============================================================
+function spawnHitParticles(x,y,color){
+  for(let i=0;i<16;i++){
+    const a=Math.random()*Math.PI*2, spd=1+Math.random()*3;
+    particles.push({x,y,vx:Math.cos(a)*spd,vy:Math.sin(a)*spd,life:1,decay:0.03+Math.random()*0.04,size:2+Math.random()*3,color});
+  }
+}
+function drawParticles(dt){
+  for(let i=particles.length-1;i>=0;i--){
+    const p=particles[i];
+    p.x+=p.vx*dt*0.1; p.y+=p.vy*dt*0.1; p.vy+=0.05; p.life-=p.decay;
+    if(p.life<=0){particles.splice(i,1);continue;}
+    ctx.globalAlpha=p.life; ctx.fillStyle=p.color;
+    ctx.shadowBlur=4; ctx.shadowColor=p.color;
+    ctx.fillRect(Math.round(p.x),Math.round(p.y),Math.ceil(p.size),Math.ceil(p.size));
+    ctx.shadowBlur=0; ctx.globalAlpha=1;
+  }
+}
+
+// ============================================================
+// COMBO
+// ============================================================
+function spawnComboText(x,y,text){comboSprites.push({x,y,text,life:1,vy:-1.5});}
+function drawComboSprites(dt){
+  for(let i=comboSprites.length-1;i>=0;i--){
+    const c=comboSprites[i];
+    c.y+=c.vy*dt*0.05; c.life-=0.018;
+    if(c.life<=0){comboSprites.splice(i,1);continue;}
+    ctx.globalAlpha=c.life; ctx.fillStyle='#ffcc00';
+    ctx.shadowBlur=8; ctx.shadowColor='#ffcc00';
+    ctx.font=`bold ${Math.round(14+(1-c.life)*6)}px 'Courier New',monospace`;
+    ctx.textAlign='center'; ctx.fillText(c.text,c.x,c.y);
+    ctx.shadowBlur=0; ctx.globalAlpha=1;
+  }
+}
+
+// ============================================================
+// FLASH
+// ============================================================
+function drawFlash(dt){
+  if(flashAlpha>0){
+    ctx.globalAlpha=flashAlpha; ctx.fillStyle='#ffffff'; ctx.fillRect(0,0,W,H);
+    ctx.globalAlpha=1; flashAlpha-=dt*0.008; if(flashAlpha<0)flashAlpha=0;
+  }
+}
+
+// ============================================================
+// HIT
+// ============================================================
+function tryHit(cx,cy){
+  if(!gameRunning)return;
+  for(let i=enemies.length-1;i>=0;i--){
+    const e=enemies[i]; if(e.dead)continue;
+    const sz=e.scale*W*0.08;
+    const dx=cx-e.x,dy=cy-e.y;
+    if(Math.sqrt(dx*dx+dy*dy)<sz*0.6+Math.max(38,W*0.055)*0.3){
+      e.dead=true; score+=e.food.kcal;
+      flashAlpha=0.2; playerKick=-8;
+      combo++; comboTimer=120;
+      spawnHitParticles(e.x,e.y,e.food.glow);
+      if(combo>=3)spawnComboText(e.x,e.y-sz*0.5,`${combo} COMBO!`);
+      updateUI(); return true;
+    }
+  }
+  combo=0; return false;
+}
+
+// ============================================================
+// UI UPDATE
+// ============================================================
+function updateUI(){
+  document.getElementById('score-val').textContent=score.toLocaleString()+' kcal';
+  const pct=Math.max(0,calCurrent/CAL_LIMIT*100);
+  document.getElementById('cal-bar-green').style.width=pct+'%';
+  const msgs=['余裕あり 💪','気をつけて！','ピンチ！','限界です…'];
+  document.getElementById('cal-text').textContent=msgs[Math.min(3,Math.floor((1-pct/100)*4))];
+  const secs=Math.ceil(Math.max(0,(GAME_DURATION-gameTimer)/1000));
+  document.getElementById('timer-val').textContent=secs;
+  if(secs<=10) document.getElementById('timer-val').style.color='#ff4466';
+  else document.getElementById('timer-val').style.color='#ffcc00';
+}
+
+// ============================================================
+// GAME LOOP
+// ============================================================
+function loop(ts){
+  if(!gameRunning)return;
+  const dt=Math.min(ts-lastTime,50); lastTime=ts;
+  gameTimer+=dt;
+  updateCalBar(dt);
+
+  ctx.clearRect(0,0,W,H);
+  drawBackground(dt);
+  drawEnemies(dt);
+  drawParticles(dt);
+  drawPlayer();
+  drawComboSprites(dt);
+  drawFlash(dt);
+
+  if(combo>0){comboTimer-=dt*0.1;if(comboTimer<=0)combo=0;}
+  if(playerKick<0){playerKick+=dt*0.08;if(playerKick>0)playerKick=0;}
+
+  spawnTimer+=dt;
+  const interval=gameTimer>GAME_DURATION*0.5?1200:1500;
+  if(spawnTimer>=interval){spawnTimer=0;spawnEnemy();}
+
+  updateUI();
+
+  if(gameTimer>=GAME_DURATION){endGame();return;}
+  if(calCurrent<=0){endGame();return;}
+  requestAnimationFrame(loop);
+}
+
+// ============================================================
+// START / END
+// ============================================================
+function startGame(){
+  gameRunning=true;
+  score=0; calCurrent=CAL_LIMIT; calorieEaten=0;
+  barGreenPct=100; barRedLeft=100; barRedWidth=0; redFadeTimer=0;
+  gameTimer=0; combo=0; comboTimer=0;
+  enemies=[]; particles=[]; comboSprites=[];
+  playerKick=0; flashAlpha=0; spawnTimer=0;
+  initBg();
+  document.getElementById('overlay').classList.add('hidden');
+  document.getElementById('result-area').style.display='none';
+  updateUI();
+  lastTime=performance.now();
+  requestAnimationFrame(loop);
+}
+
+function endGame(){
+  gameRunning=false;
+  const survived=calCurrent>0;
+  document.getElementById('result-en-txt').textContent=survived?'MIDNIGHT DEFENSE SUCCESS':'MIDNIGHT DEFENSE FAILED';
+  document.getElementById('result-jp-txt').textContent=survived?'— 今夜の誘惑に勝ちました —':'— 深夜食欲に負けました —';
+  document.getElementById('final-score').textContent=score.toLocaleString()+' kcal';
+  document.getElementById('final-eaten').textContent=calorieEaten.toLocaleString()+' kcal';
+  document.getElementById('result-area').style.display='block';
+  document.getElementById('overlay').classList.remove('hidden');
+  document.getElementById('start-btn').textContent='▶ RETRY';
+}
+
+// ============================================================
+// INPUT
+// ============================================================
+function handleClick(e){
+  e.preventDefault(); if(!gameRunning)return;
+  const rect=canvas.getBoundingClientRect();
+  let cx,cy;
+  if(e.touches){cx=e.touches[0].clientX-rect.left;cy=e.touches[0].clientY-rect.top;}
+  else{cx=e.clientX-rect.left;cy=e.clientY-rect.top;}
+  if(!tryHit(cx,cy)){playerKick=-4;flashAlpha=0.05;}
+}
+canvas.addEventListener('click',handleClick);
+canvas.addEventListener('touchstart',handleClick,{passive:false});
+document.getElementById('start-btn').addEventListener('click',startGame);
+document.getElementById('start-btn').addEventListener('touchstart',e=>{e.stopPropagation();startGame();});
+
+// init draw
+(function(){ctx.clearRect(0,0,W,H);initBg();drawBackground(0);})();
+</script>
+</body>
+</html>
